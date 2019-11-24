@@ -1,4 +1,4 @@
-package com.api.demo.demo.exception;
+package com.api.demo.demo.exception.customs;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -10,7 +10,10 @@ import lombok.Getter;
 public class NotFoundRequestException extends RuntimeException {
 
 	private static final long serialVersionUID = -8296171132895045641L;
-
+	
+	public NotFoundRequestException() {
+	}
+	
 	public NotFoundRequestException(String msg) {
 		super(msg);
 	}

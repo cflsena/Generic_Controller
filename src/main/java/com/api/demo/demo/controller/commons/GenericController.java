@@ -1,8 +1,15 @@
 package com.api.demo.demo.controller.commons;
 
-import java.util.Collections;
 import java.util.List;
-import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.Optional;
+
+import javax.servlet.http.HttpServletResponse;
+import javax.validation.Valid;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -10,51 +17,50 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import com.api.demo.demo.exception.NotFoundRequestException;
-import com.api.demo.demo.infra.RestGenericFunction;
+import org.springframework.web.bind.annotation.ResponseStatus;
+
+import com.api.demo.demo.event.CreatedResourceEvent;
+import com.api.demo.demo.service.commons.interfaces.GenericService;
 
 @Controller
 public abstract class GenericController<Entity, ID> {
 
-  @GetMapping
-  public List<Entity> findAll() {
-    this.validFunction(RestGenericFunction.FIND_ALL);
-    return getRepository().findAll();
-  }
+	@Autowired
+	private ApplicationEventPublisher publisher;
 
-  @GetMapping(path = "/{id}")
-  public Entity findById(@PathVariable("id") ID id) {
-    this.validFunction(RestGenericFunction.FIND_BY_ID);
-    return getRepository().findById(id).orElse(null);
-  }
+	@GetMapping
+	protected List<Entity> findAll() {
+		return getService().findAll();
+	}
 
-  @PostMapping
-  public Entity create(@RequestBody Entity entity) {
-    this.validFunction(RestGenericFunction.SAVE);
-    return getRepository().save(entity);
-  }
+	@GetMapping(path = "/{id}")
+	protected ResponseEntity<Entity> find(@PathVariable("id") ID id) {
+		Optional<Entity> op = getService().findById((Long) id);
+		return op.isPresent() ? ResponseEntity.ok((Entity) op.get()) : ResponseEntity.notFound().build();
+	}
 
-  @PutMapping
-  public Entity alter(@RequestBody Entity entity) {
-    this.validFunction(RestGenericFunction.ALTER);
-    return getRepository().save(entity);
-  }
+	@PostMapping
+	@SuppressWarnings("unchecked")
+	protected ResponseEntity<Entity> create(@Valid @RequestBody Entity entityToSave, HttpServletResponse response) {
+		Entity entity = (Entity) getService().save(entityToSave);
+		publisher.publishEvent(new CreatedResourceEvent(this, response, 0L));
+		return ResponseEntity.status(HttpStatus.CREATED).body(entity);
+	}
 
-  @DeleteMapping(path = "/{id}")
-  public void delete(@PathVariable("id") ID id) {
-    this.validFunction(RestGenericFunction.DELETE);
-    getRepository().deleteById(id);
-  }
+	@SuppressWarnings("unchecked")
+	@PutMapping("/{id}")
+	protected ResponseEntity<Entity> alter(@PathVariable ID id, @Valid @RequestBody Entity entityRequest,
+			HttpServletResponse response) {
+		Entity entityUpdated = (Entity) getService().update(entityRequest, (Long) id);
+		publisher.publishEvent(new CreatedResourceEvent(this, response, 0L));
+		return ResponseEntity.ok(entityUpdated);
+	}
 
-  private void validFunction(final RestGenericFunction function) {
-    if (ignoreResourcePath().contains(function))
-      throw new NotFoundRequestException("Resource not found");
-  }
+	@DeleteMapping(path = "/{id}")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	protected void delete(@PathVariable("id") ID id) {
+		getService().deleteById((Long) id);
+	}
 
-  public abstract JpaRepository<Entity, ID> getRepository();
-  
-  public List<RestGenericFunction> ignoreResourcePath() {
-    return Collections.emptyList();
-  }
-
+	protected abstract GenericService<Entity, Long> getService();
 }
